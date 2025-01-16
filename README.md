@@ -11,6 +11,7 @@ This repository is part of a tutorial series on the [CodeQuest Hub](https://code
 ## Blog Series
 Follow the full tutorial series on the CodeQuest Hub blog:
 - [Building Tic-Tac-Toe in Rust: Part 1 - The Basics](https://codequesthub.io/posts/2025/01/17/tic-tac-toe/index.html)
+- [Part 2 - Testing the Game](https://codequesthub.io)
 
 ## Change Log
 This repository evolves with each tutorial post. Here’s a summary of the versions:
@@ -18,6 +19,10 @@ This repository evolves with each tutorial post. Here’s a summary of the versi
 ### Version 1: Initial 2-Player Game
 - Built a text-based Tic-Tac-Toe game for two players.
 - Displayed the board in ASCII art after each turn.
+
+### Version 2: Added Tests
+- Introduced unit tests for critical game logic like checking winners.
+- Refactored the code to use the `FromStr` trait for parsing game states.
 
 ## Getting Started
 To run the game:
