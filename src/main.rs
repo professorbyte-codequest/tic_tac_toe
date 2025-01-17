@@ -1,16 +1,24 @@
-use std::str::FromStr;
+use std::{collections::btree_set::Difference, str::FromStr};
+
+use rand::{seq::SliceRandom, thread_rng};
 
 #[derive(Debug, Clone)]
 struct GameState {
     board: Vec<Option<char>>,
     current_player: char,
+    difficulty: u8, // 1: Random, 2: Best Move, 3: Minimax
 }
 
 impl GameState {
     fn new() -> Self {
+        Self::with_difficulty(2)
+    }
+
+    fn with_difficulty(difficulty: u8) -> Self {
         GameState {
             board: vec![None; 9],
             current_player: 'X',
+            difficulty,
         }
     }
 
@@ -77,6 +85,84 @@ impl GameState {
         }
         None
     }
+
+    fn available_moves(&self) -> Vec<usize> {
+        self.board
+            .iter()
+            .enumerate()
+            .filter_map(|(i, &square)| if square.is_none() { Some(i) } else { None })
+            .collect()
+    }
+
+    fn would_move_win(&self, player: char, i: usize) -> bool {
+        let mut simulated_board = self.board.clone();
+        simulated_board[i] = Some(player);
+        let simulated_state = GameState {
+            board: simulated_board,
+            current_player: player,
+            difficulty: self.difficulty,
+        };
+
+        simulated_state.check_winner() == Some(player)
+    }
+
+    pub fn best_move(&self, player: char) -> Option<usize> {
+        let opponent = if player == 'X' { 'O' } else { 'X' };
+
+        let available_moves = self.available_moves();
+
+        // Step 1: Check for a winning move
+        for i in available_moves.iter() {
+            if self.would_move_win(player, *i) {
+                return Some(*i);
+            }
+        }
+
+        // Step 2: Check for a blocking move
+        for i in available_moves.iter() {
+            if self.would_move_win(opponent, *i) {
+                return Some(*i);
+            }
+        }
+
+        if self.difficulty > 2 {
+            // Step 3: Choose the best available square
+            let priority_squares = [4, 0, 2, 6, 8, 1, 3, 5, 7];
+            for &i in &priority_squares {
+                if self.board[i].is_none() {
+                    return Some(i);
+                }
+            }
+        }
+
+        self.random_move()
+    }
+
+    pub fn ai_move(&mut self, player: char) {
+        let move_index = match self.difficulty {
+            1 => self.random_move(),
+            2 => self.best_move(player),
+            3 => self.best_move(player),
+            _ => panic!("Unknown diffoculty level!"),
+        };
+
+        if let Some(i) = move_index {
+            self.board[i] = Some('O');
+        } else {
+            panic!("No available moves!");
+        }
+
+        self.current_player = 'X';
+    }
+
+    fn random_move(&self) -> Option<usize> {
+        let empty_squares = self.available_moves();
+        if empty_squares.is_empty() {
+            None
+        } else {
+            empty_squares.choose(&mut thread_rng()).copied()
+        }
+    }
 }
 
 impl FromStr for GameState {
@@ -109,16 +195,29 @@ impl FromStr for GameState {
         Ok(GameState {
             board,
             current_player,
+            difficulty: 1,
         })
     }
 }
 
 fn main() {
-    let mut game = GameState::new();
+    println!("Choose AI difficulty: 1 (Easy), 2 (Normal) or 3 (Hard):");
+    let mut input = String::new();
+    std::io::stdin().read_line(&mut input).unwrap();
+    let difficulty = input.trim().parse::<u8>().unwrap_or(2);
+
+    let mut game = GameState::with_difficulty(difficulty);
 
     loop {
         game.display();
-        game.play_turn();
+
+        if game.current_player == 'X' {
+            // Human player
+            game.play_turn();
+        } else {
+            // Machine player
+            game.ai_move('O');
+        }
 
         if let Some(winner) = game.check_winner() {
             game.display();
@@ -219,5 +318,46 @@ mod tests {
         let game = GameState::from_str(input).unwrap();
         assert!(game.board.iter().all(|&sq| sq.is_none()));
         assert_eq!(game.current_player, 'X');
+    }
+
+    #[test]
+    fn test_best_move_winning() {
+        let mut game = GameState::new();
+        game.board = vec![
+            Some('X'),
+            Some('X'),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        ];
+        assert_eq!(game.best_move('X'), Some(2));
+    }
+
+    #[test]
+    fn test_best_move_blocking() {
+        let mut game = GameState::new();
+        game.board = vec![
+            Some('O'),
+            Some('O'),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        ];
+        assert_eq!(game.best_move('X'), Some(2));
+    }
+
+    #[test]
+    fn test_best_move_priority() {
+        let mut game = GameState::new();
+        game.board = vec![None, None, None, None, None, None, None, None, None];
+        assert_eq!(game.best_move('X'), Some(4)); // Center square
     }
 }
