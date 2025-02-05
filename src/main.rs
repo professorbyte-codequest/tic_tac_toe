@@ -1,4 +1,4 @@
-use std::{collections::btree_set::Difference, str::FromStr};
+use std::str::FromStr;
 
 use rand::{seq::SliceRandom, thread_rng};
 
@@ -10,6 +10,7 @@ struct GameState {
 }
 
 impl GameState {
+    #[cfg(test)]
     fn new() -> Self {
         Self::with_difficulty(2)
     }
@@ -124,35 +125,72 @@ impl GameState {
                 return Some(*i);
             }
         }
+        self.random_move()
+    }
 
-        if self.difficulty > 2 {
-            // Step 3: Choose the best available square
-            let priority_squares = [4, 0, 2, 6, 8, 1, 3, 5, 7];
-            for &i in &priority_squares {
-                if self.board[i].is_none() {
-                    return Some(i);
+    fn minimax(&self, is_maximizing: bool) -> (i32, Option<usize>) {
+        if let Some(winner) = self.check_winner() {
+            return match winner {
+                'X' => (-10, None), // Human wins
+                'O' => (10, None),  // AI wins
+                _ => (0, None),    // Draw
+            };
+        }
+        
+        if self.board.iter().all(|&square| square.is_some()) {
+            return (0, None); // Draw
+        }
+        
+        let mut best_score = if is_maximizing { i32::MIN } else { i32::MAX };
+        let mut best_move = None;
+        
+        for &i in &self.available_moves() {
+            let mut simulated_board = self.board.clone();
+            simulated_board[i] = Some(if is_maximizing { 'O' } else { 'X' });
+            
+            let simulated_state = GameState {
+                board: simulated_board,
+                current_player: if is_maximizing { 'X' } else { 'O' },
+                difficulty: self.difficulty,
+            };
+            
+            let (score, _) = simulated_state.minimax(!is_maximizing);
+            
+            if is_maximizing {
+                if score > best_score {
+                    best_score = score;
+                    best_move = Some(i);
+                }
+            } else {
+                if score < best_score {
+                    best_score = score;
+                    best_move = Some(i);
                 }
             }
         }
-
-        self.random_move()
+        
+        (best_score, best_move)
     }
 
     pub fn ai_move(&mut self, player: char) {
         let move_index = match self.difficulty {
             1 => self.random_move(),
             2 => self.best_move(player),
-            3 => self.best_move(player),
-            _ => panic!("Unknown diffoculty level!"),
+            3 => {
+                let is_maximizing = player == 'O';
+                let (_, move_index) = self.minimax(is_maximizing);
+                move_index
+            }
+            _ => panic!("Unknown difficulty level!"),
         };
 
         if let Some(i) = move_index {
-            self.board[i] = Some('O');
+            self.board[i] = Some(player);
         } else {
             panic!("No available moves!");
         }
 
-        self.current_player = 'X';
+        self.current_player = if player == 'X' { 'O' } else { 'X' };
     }
 
     fn random_move(&self) -> Option<usize> {
@@ -216,7 +254,7 @@ fn main() {
             game.play_turn();
         } else {
             // Machine player
-            game.ai_move('O');
+            game.ai_move(game.current_player);
         }
 
         if let Some(winner) = game.check_winner() {
@@ -355,9 +393,35 @@ mod tests {
     }
 
     #[test]
-    fn test_best_move_priority() {
+    fn test_minimax_block() {
         let mut game = GameState::new();
-        game.board = vec![None, None, None, None, None, None, None, None, None];
-        assert_eq!(game.best_move('X'), Some(4)); // Center square
+        game.board = vec![
+            Some('X'),
+            None,
+            Some('X'),
+            Some('O'),
+            None,
+            None,
+            None,
+            None,
+            None,
+        ];
+        let (score, i) = game.minimax(true);
+        assert_eq!(score, -10);
+        assert_eq!(i, Some(1));
+    }
+
+    #[test]
+    fn test_ai_draws() {
+        let mut game = GameState::with_difficulty(3);
+
+        loop {
+            game.ai_move(game.current_player);
+            
+            assert_eq!(game.check_winner(), None);
+            if game.available_moves().is_empty() {
+                break;
+            }
+        }
     }
 }
